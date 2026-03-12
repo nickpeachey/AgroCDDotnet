@@ -81,29 +81,18 @@ jobs:
     runs-on: self-hosted
     permissions:
       contents: write
-    outputs:
-      previous_api_image: ${{ steps.current-dev-images.outputs.api_image }}
-      previous_db_image: ${{ steps.current-dev-images.outputs.db_image }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Capture current Dev images
-        id: current-dev-images
+      - name: Prepare release/dev branch
         run: |
-          get_image() {
-            local target="$1"
-            awk -v target="$target" '
-              $1 == "-" && $2 == "name:" && $3 == target { in_block=1; next }
-              in_block && $1 == "newName:" { new_name=$2; next }
-              in_block && $1 == "newTag:" { print new_name ":" $2; exit }
-              in_block && $1 == "-" && $2 == "name:" { exit }
-            ' gitops/overlays/dev/kustomization.yaml
-          }
-
-          echo "api_image=$(get_image agrocd-api)" >> $GITHUB_OUTPUT
-          echo "db_image=$(get_image agrocd-db-migrator)" >> $GITHUB_OUTPUT
+          git fetch origin main
+          if git ls-remote --exit-code --heads origin release/dev; then
+            git fetch origin release/dev
+          fi
+          git checkout -B release/dev origin/main
 
       - name: Update Dev Kustomize
         run: |
@@ -115,10 +104,9 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add gitops/overlays/dev/kustomization.yaml
+          git add .
           git commit -m "Update dev images to ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
-          git pull --rebase origin main
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git push --force-with-lease https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/dev
 
       - name: Cleanup runner state
         if: always()
@@ -196,68 +184,6 @@ jobs:
           git clean -fdx
           df -h
 
-  rollback-dev:
-    needs: [build, deploy-dev, validation]
-    if: ${{ always() && needs.validation.result == 'failure' }}
-    runs-on: self-hosted
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Roll back Dev Kustomize
-        run: |
-          cd gitops/overlays/dev
-          kustomize edit set image agrocd-api=${{ needs.deploy-dev.outputs.previous_api_image }}
-          kustomize edit set image agrocd-db-migrator=${{ needs.deploy-dev.outputs.previous_db_image }}
-
-      - name: Commit and Push rollback (Dev)
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add gitops/overlays/dev/kustomization.yaml
-          git commit -m "Rollback dev images after failed validation: ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
-          git pull --rebase origin main
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-
-      - name: Wait for rollback sync
-        run: |
-          EXPECTED_API_IMAGE="${{ needs.deploy-dev.outputs.previous_api_image }}"
-          EXPECTED_DB_IMAGE="${{ needs.deploy-dev.outputs.previous_db_image }}"
-          CURRENT_API_IMAGE=""
-          CURRENT_DB_IMAGE=""
-
-          for _ in $(seq 1 60); do
-            CURRENT_API_IMAGE=$(kubectl get deployment/agrocd-api -n api-dev -o jsonpath='{.spec.template.spec.containers[0].image}')
-            CURRENT_DB_IMAGE=$(kubectl get job/agrocd-db-migrator -n api-dev -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)
-
-            if [ "$CURRENT_API_IMAGE" = "$EXPECTED_API_IMAGE" ] && [ "$CURRENT_DB_IMAGE" = "$EXPECTED_DB_IMAGE" ]; then
-              break
-            fi
-
-            sleep 5
-          done
-
-          if [ "$CURRENT_API_IMAGE" != "$EXPECTED_API_IMAGE" ]; then
-            echo "API image did not roll back to expected value."
-            exit 1
-          fi
-
-          if [ "$CURRENT_DB_IMAGE" != "$EXPECTED_DB_IMAGE" ]; then
-            echo "DB migrator image did not roll back to expected value."
-            exit 1
-          fi
-
-          kubectl rollout status deployment/agrocd-api -n api-dev --timeout=120s
-
-      - name: Cleanup runner state
-        if: always()
-        run: |
-          git clean -fdx
-          df -h
-
   promotion:
     needs: [build, validation]
     runs-on: self-hosted
@@ -267,6 +193,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Prepare release/test branch
+        run: |
+          git fetch origin release/dev
+          if git ls-remote --exit-code --heads origin release/test; then
+            git fetch origin release/test
+          fi
+          git checkout -B release/test origin/release/dev
 
       - name: Update Test Kustomize
         run: |
@@ -278,10 +212,9 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add gitops/overlays/test/kustomization.yaml
+          git add .
           git commit -m "Promote app and db images to test: ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
-          git pull --rebase origin main
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git push --force-with-lease https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/test
 
       - name: Cleanup runner state
         if: always()

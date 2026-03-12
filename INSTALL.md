@@ -89,8 +89,9 @@ Push a change to `main` to trigger the full path.
 *   It builds and pushes the database migrator image from [`AgroCDDotnet.Database`](./AgroCDDotnet.Database/Program.cs).
 
 ### 2. Dev Deployment
-*   The workflow updates `gitops/overlays/dev/kustomization.yaml` with the new API and database migrator images.
-*   ArgoCD syncs `api-dev`.
+*   The workflow creates or updates the `release/dev` branch from the latest `main`.
+*   It updates `gitops/overlays/dev/kustomization.yaml` there with the new API and database migrator images.
+*   ArgoCD syncs `api-dev` from `release/dev`.
 *   During sync, ArgoCD deploys Postgres, runs the database migration job, and then rolls out the API.
 *   The dev Postgres instance uses ephemeral storage.
 
@@ -100,13 +101,13 @@ Push a change to `main` to trigger the full path.
 *   Newman runs [`integration-tests.postman_collection.json`](./integration-tests.postman_collection.json) against the same dev environment.
 
 ### 4. Promotion
-*   If dev validation passes, the workflow updates `gitops/overlays/test/kustomization.yaml` with the same API and database migrator images.
-*   ArgoCD syncs `api-test` and applies the same migration path there.
+*   If dev validation passes, the workflow builds a `release/test` branch from the validated `release/dev` state and updates `gitops/overlays/test/kustomization.yaml` there.
+*   The `api-test` ArgoCD application tracks `release/test`, so test only syncs after promotion.
 *   The test Postgres instance uses a persistent volume claim bound to a dedicated persistent volume.
 
-### 5. Automatic Dev Rollback
-*   If validation fails after `api-dev` is updated, the workflow commits a rollback of the dev overlay to the previously deployed API and database migrator images.
-*   ArgoCD then syncs `api-dev` back to those prior images.
+### 5. Validation Failure Behavior
+*   If validation fails after `api-dev` is updated, promotion to `release/test` does not occur.
+*   `api-test` therefore remains on its last promoted state.
 *   Database migrations are not rolled back automatically. Migrations must therefore be forward-only and backward-compatible with the previous API version.
 
 ---
