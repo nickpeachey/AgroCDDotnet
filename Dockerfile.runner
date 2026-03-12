@@ -55,6 +55,12 @@ RUN useradd -m runner && usermod -aG sudo runner && echo "runner ALL=(ALL) NOPAS
 USER root
 WORKDIR /home/runner
 
+# Fix: Ensure entrypoint.sh uses LF line endings and is executable
+COPY entrypoint.sh ./entrypoint.sh
+RUN tr -d '\r' < entrypoint.sh > entrypoint_unix.sh \
+    && mv entrypoint_unix.sh entrypoint.sh \
+    && chmod +x entrypoint.sh
+
 # Download GitHub Actions runner
 ARG RUNNER_VERSION=2.313.0
 RUN if [ "$(dpkg --print-architecture)" = "arm64" ]; then \
@@ -67,7 +73,5 @@ RUN if [ "$(dpkg --print-architecture)" = "arm64" ]; then \
     && tar xzf ./actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
     && rm actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz
 
-COPY --chown=runner:runner entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
-
+# Note: COPY entrypoint.sh happens here now
 ENTRYPOINT ["./entrypoint.sh"]
