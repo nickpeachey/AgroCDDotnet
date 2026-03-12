@@ -25,6 +25,12 @@ public class Program
 
         app.UseAuthorization();
 
+        app.MapGet("/hello", (string name) =>
+        {
+            return Results.Ok(new GreetingResponse($"Hello, {name}!"));
+        })
+        .WithName("GetGreeting");
+
         var summaries = new[]
         {
             "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
@@ -47,3 +53,5 @@ public class Program
         app.Run();
     }
 }
+
+public record GreetingResponse(string Message);
