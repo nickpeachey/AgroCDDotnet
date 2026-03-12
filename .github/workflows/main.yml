@@ -65,10 +65,6 @@ jobs:
           cd gitops/overlays/dev
           kustomize edit set image agrocd-api=${{ needs.build.outputs.full_image }}
           
-      - name: Apply Dev manifests
-        run: |
-          kubectl apply -k gitops/overlays/dev
-          
       - name: Commit and Push changes (Dev)
         run: |
           git config --local user.email "action@github.com"
@@ -93,7 +89,27 @@ jobs:
 
       - name: Wait for ArgoCD sync
         run: |
-          # Wait for the new version to be rolled out by ArgoCD
+          EXPECTED_IMAGE="${{ needs.build.outputs.full_image }}"
+          CURRENT_IMAGE=""
+
+          for _ in $(seq 1 24); do
+            CURRENT_IMAGE=$(kubectl get deployment/agrocd-api -n api-dev -o jsonpath='{.spec.template.spec.containers[0].image}')
+            echo "Current deployment image: $CURRENT_IMAGE"
+
+            if [ "$CURRENT_IMAGE" = "$EXPECTED_IMAGE" ]; then
+              break
+            fi
+
+            sleep 5
+          done
+
+          if [ "$CURRENT_IMAGE" != "$EXPECTED_IMAGE" ]; then
+            echo "Deployment image did not update to expected value."
+            echo "Expected: $EXPECTED_IMAGE"
+            echo "Actual: $CURRENT_IMAGE"
+            exit 1
+          fi
+
           kubectl rollout status deployment/agrocd-api -n api-dev --timeout=120s
 
       - name: Run .NET integration tests
@@ -132,10 +148,6 @@ jobs:
         run: |
           cd gitops/overlays/test
           kustomize edit set image agrocd-api=${{ needs.build.outputs.full_image }}
-
-      - name: Apply Test manifests
-        run: |
-          kubectl apply -k gitops/overlays/test
 
       - name: Commit and Push changes (Test)
         run: |
