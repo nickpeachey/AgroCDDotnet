@@ -53,9 +53,13 @@ jobs:
       - name: Cleanup runner state
         if: always()
         run: |
+          IMAGE_PATH=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          docker system df || true
+          docker image rm ${IMAGE_PATH}:${{ steps.vars.outputs.tag }} ${IMAGE_PATH}:latest || true
           git clean -fdx
-          docker builder prune -af --filter "until=24h" || true
-          docker image prune -af --filter "until=24h" || true
+          docker builder prune -af || true
+          docker image prune -af || true
+          docker system df || true
           df -h
 
   deploy-dev:
