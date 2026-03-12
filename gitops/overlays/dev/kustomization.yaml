@@ -14,4 +14,4 @@ patches:
 images:
 - name: agrocd-api
   newName: ghcr.io/nickpeachey/agrocd-api
-  newTag: 9e57509
+  newTag: "2921217"
