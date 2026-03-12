@@ -110,7 +110,7 @@ jobs:
           EXPECTED_IMAGE="${{ needs.build.outputs.full_image }}"
           CURRENT_IMAGE=""
 
-          for _ in $(seq 1 24); do
+          for _ in $(seq 1 60); do
             CURRENT_IMAGE=$(kubectl get deployment/agrocd-api -n api-dev -o jsonpath='{.spec.template.spec.containers[0].image}')
             echo "Current deployment image: $CURRENT_IMAGE"
 
