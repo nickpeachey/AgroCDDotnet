@@ -8,6 +8,7 @@ This repository deploys a .NET Todo API with ArgoCD, Postgres, and a separate da
 * `api-test` runs the API, a Postgres instance backed by a persistent volume, and the database migrator job.
 * `api-dev` tracks `release/dev`, while `api-test` tracks `release/test`.
 * `main` is the source branch. The workflow publishes validated deployment state to the release branches.
+* CI logs now print the exact `release/dev` and `release/test` commit revisions pushed for deployment so Argo sync issues can be traced to branch state vs cluster state.
 
 ## Database credentials
 

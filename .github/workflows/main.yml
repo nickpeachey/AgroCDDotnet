@@ -4,6 +4,10 @@ on:
   push:
     branches: [ main ]
 
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
 env:
   API_IMAGE_NAME: agrocd-api
   DB_IMAGE_NAME: agrocd-db-migrator
@@ -81,6 +85,8 @@ jobs:
     runs-on: self-hosted
     permissions:
       contents: write
+    outputs:
+      release_dev_revision: ${{ steps.push-release-dev.outputs.release_dev_revision }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,6 +97,7 @@ jobs:
           git fetch origin main
           if git ls-remote --exit-code --heads origin release/dev; then
             git fetch origin release/dev
+            echo "REMOTE_RELEASE_DEV_SHA=$(git rev-parse origin/release/dev)" >> $GITHUB_ENV
           fi
           git checkout -B release/dev origin/main
 
@@ -101,12 +108,22 @@ jobs:
           kustomize edit set image agrocd-db-migrator=${{ needs.build.outputs.db_image }}
 
       - name: Commit and Push changes (Dev)
+        id: push-release-dev
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add .
           git commit -m "Update dev images to ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
-          git push --force-with-lease https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/dev
+          if [ -n "${REMOTE_RELEASE_DEV_SHA:-}" ]; then
+            git push --force-with-lease=refs/heads/release/dev:${REMOTE_RELEASE_DEV_SHA} https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/dev
+          else
+            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/dev
+          fi
+          RELEASE_DEV_REVISION=$(git rev-parse HEAD)
+          echo "release_dev_revision=${RELEASE_DEV_REVISION}" >> $GITHUB_OUTPUT
+          echo "Pushed release/dev revision: ${RELEASE_DEV_REVISION}"
+          echo "Expected API image: ${{ needs.build.outputs.api_image }}"
+          echo "Expected DB image: ${{ needs.build.outputs.db_image }}"
 
       - name: Cleanup runner state
         if: always()
@@ -129,16 +146,20 @@ jobs:
         run: |
           EXPECTED_API_IMAGE="${{ needs.build.outputs.api_image }}"
           EXPECTED_DB_IMAGE="${{ needs.build.outputs.db_image }}"
+          EXPECTED_REVISION="${{ needs.deploy-dev.outputs.release_dev_revision }}"
           CURRENT_API_IMAGE=""
           CURRENT_DB_IMAGE=""
+          CURRENT_REVISION=""
 
           for _ in $(seq 1 60); do
             CURRENT_API_IMAGE=$(kubectl get deployment/agrocd-api -n api-dev -o jsonpath='{.spec.template.spec.containers[0].image}')
             CURRENT_DB_IMAGE=$(kubectl get job/agrocd-db-migrator -n api-dev -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)
+            CURRENT_REVISION=$(kubectl get application api-dev -n argocd -o jsonpath='{.status.sync.revision}')
             echo "Current API image: $CURRENT_API_IMAGE"
             echo "Current DB migrator image: $CURRENT_DB_IMAGE"
+            echo "Current Argo revision: $CURRENT_REVISION"
 
-            if [ "$CURRENT_API_IMAGE" = "$EXPECTED_API_IMAGE" ] && [ "$CURRENT_DB_IMAGE" = "$EXPECTED_DB_IMAGE" ]; then
+            if [ "$CURRENT_API_IMAGE" = "$EXPECTED_API_IMAGE" ] && [ "$CURRENT_DB_IMAGE" = "$EXPECTED_DB_IMAGE" ] && [ "$CURRENT_REVISION" = "$EXPECTED_REVISION" ]; then
               break
             fi
 
@@ -152,6 +173,13 @@ jobs:
 
           if [ "$CURRENT_DB_IMAGE" != "$EXPECTED_DB_IMAGE" ]; then
             echo "Database migrator image did not update to expected value."
+            exit 1
+          fi
+
+          if [ "$CURRENT_REVISION" != "$EXPECTED_REVISION" ]; then
+            echo "ArgoCD application revision did not update to expected release/dev commit."
+            echo "Expected revision: $EXPECTED_REVISION"
+            echo "Actual revision: $CURRENT_REVISION"
             exit 1
           fi
 
@@ -189,6 +217,8 @@ jobs:
     runs-on: self-hosted
     permissions:
       contents: write
+    outputs:
+      release_test_revision: ${{ steps.push-release-test.outputs.release_test_revision }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -199,6 +229,7 @@ jobs:
           git fetch origin release/dev
           if git ls-remote --exit-code --heads origin release/test; then
             git fetch origin release/test
+            echo "REMOTE_RELEASE_TEST_SHA=$(git rev-parse origin/release/test)" >> $GITHUB_ENV
           fi
           git checkout -B release/test origin/release/dev
 
@@ -209,12 +240,22 @@ jobs:
           kustomize edit set image agrocd-db-migrator=${{ needs.build.outputs.db_image }}
 
       - name: Commit and Push changes (Test)
+        id: push-release-test
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add .
           git commit -m "Promote app and db images to test: ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
-          git push --force-with-lease https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/test
+          if [ -n "${REMOTE_RELEASE_TEST_SHA:-}" ]; then
+            git push --force-with-lease=refs/heads/release/test:${REMOTE_RELEASE_TEST_SHA} https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/test
+          else
+            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/test
+          fi
+          RELEASE_TEST_REVISION=$(git rev-parse HEAD)
+          echo "release_test_revision=${RELEASE_TEST_REVISION}" >> $GITHUB_OUTPUT
+          echo "Pushed release/test revision: ${RELEASE_TEST_REVISION}"
+          echo "Expected API image: ${{ needs.build.outputs.api_image }}"
+          echo "Expected DB image: ${{ needs.build.outputs.db_image }}"
 
       - name: Cleanup runner state
         if: always()
