@@ -13,4 +13,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${HOME}/.kube/config:/home/runner/.kube/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: always

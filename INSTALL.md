@@ -66,6 +66,12 @@ GITHUB_TOKEN=PASTE_COPIED_TOKEN_HERE
 docker-compose -f docker-compose.runner.yml up --build -d
 ```
 
+If you change the runner container configuration later, recreate it so Docker host networking aliases are refreshed:
+
+```bash
+docker-compose -f docker-compose.runner.yml up --build -d --force-recreate
+```
+
 **Verification:** Check the logs until the runner is listening for jobs:
 ```bash
 docker logs -f github-runner
