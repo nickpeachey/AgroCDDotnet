@@ -1,3 +1,4 @@
+using AgroCDDotnet.Api.Todos;
 
 namespace AgroCDDotnet.Api;
 
@@ -7,48 +8,33 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        // Add services to the container.
         builder.Services.AddAuthorization();
-
-        // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
         builder.Services.AddOpenApi();
+        builder.Services.AddSingleton<ITodoRepository>(_ =>
+            new PostgresTodoRepository(builder.Configuration.GetConnectionString("TodosDatabase")));
 
         var app = builder.Build();
 
-        // Configure the HTTP request pipeline.
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi();
         }
 
         app.UseHttpsRedirection();
-
         app.UseAuthorization();
 
-        app.MapGet("/hello", (string name) =>
-        {
-            return Results.Ok(new GreetingResponse($"Hello, {name}!"));
-        })
-        .WithName("GetGreeting");
+        app.MapGet("/hello", (string name) => Results.Ok(new GreetingResponse($"Hello, {name}!")))
+            .WithName("GetGreeting");
 
-        var summaries = new[]
+        app.MapGet("/healthz", async (ITodoRepository repository, CancellationToken cancellationToken) =>
         {
-            "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-        };
+            var isHealthy = await repository.CanConnectAsync(cancellationToken);
+            return isHealthy
+                ? Results.Ok(new { status = "ok" })
+                : Results.Problem("Database connectivity check failed.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        });
 
-        app.MapGet("/weatherforecast", (HttpContext httpContext) =>
-        {
-            var forecast =  Enumerable.Range(1, 5).Select(index =>
-                new WeatherForecast
-                {
-                    Date = DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                    TemperatureC = Random.Shared.Next(-20, 55),
-                    Summary = summaries[Random.Shared.Next(summaries.Length)]
-                })
-                .ToArray();
-            return forecast;
-        })
-        .WithName("GetWeatherForecast");
+        app.MapTodos();
 
         app.Run();
     }

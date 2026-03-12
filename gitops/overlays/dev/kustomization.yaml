@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
 - ../../base
+- postgres-secret.yaml
 namespace: api-dev
 patches:
 - patch: |-
@@ -15,3 +16,6 @@ images:
 - name: agrocd-api
   newName: ghcr.io/nickpeachey/agrocd-api
   newTag: 09b25e2
+- name: agrocd-db-migrator
+  newName: ghcr.io/nickpeachey/agrocd-db-migrator
+  newTag: 7c5d6c7
