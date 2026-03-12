@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: 'https://github.com/your-repo/AgroCDDotnet.git'
+    repoURL: 'https://github.com/nickpeachey/AgroCDDotnet'
     targetRevision: HEAD
     path: gitops/overlays/dev
   destination:
@@ -25,7 +25,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: 'https://github.com/your-repo/AgroCDDotnet.git'
+    repoURL: 'https://github.com/nickpeachey/AgroCDDotnet'
     targetRevision: HEAD
     path: gitops/overlays/test
   destination:

@@ -14,4 +14,4 @@ patches:
 images:
 - name: agrocd-api
   newName: agrocd-api
-  newTag: latest
+  newTag: v1.0.0-test

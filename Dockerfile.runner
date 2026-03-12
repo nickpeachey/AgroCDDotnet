@@ -1,0 +1,73 @@
+FROM ubuntu:24.04
+
+# Avoid prompts from apt
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    sudo \
+    unzip \
+    apt-transport-https \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    build-essential \
+    libssl-dev \
+    libffi-dev \
+    python3-dev \
+    jq \
+    libicu-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+    && chmod a+r /etc/apt/keyrings/docker.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
+    && apt-get update && apt-get install -y docker-ce-cli && rm -rf /var/lib/apt/lists/*
+
+# Install kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/$(dpkg --print-architecture)/kubectl" \
+    && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
+    && rm kubectl
+
+# Install kind
+RUN curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-$(dpkg --print-architecture) \
+    && chmod +x ./kind \
+    && mv ./kind /usr/local/bin/kind
+
+# Install kustomize
+RUN curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash \
+    && mv kustomize /usr/local/bin/
+
+# Install .NET 10 SDK (using Microsoft's install script)
+RUN curl -fL https://dot.net/v1/dotnet-install.sh -o dotnet-install.sh \
+    && chmod +x dotnet-install.sh \
+    && ./dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet \
+    && ln -s /usr/share/dotnet/dotnet /usr/local/bin/dotnet \
+    && rm dotnet-install.sh
+
+# Create a user for the runner
+RUN useradd -m runner && usermod -aG sudo runner && echo "runner ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+USER root
+WORKDIR /home/runner
+
+# Download GitHub Actions runner
+ARG RUNNER_VERSION=2.313.0
+RUN if [ "$(dpkg --print-architecture)" = "arm64" ]; then \
+        export ARCH="arm64"; \
+    else \
+        export ARCH="x64"; \
+    fi && \
+    mkdir actions-runner && cd actions-runner \
+    && curl -o actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz -L https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
+    && tar xzf ./actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz \
+    && rm actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz
+
+COPY --chown=runner:runner entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
+
+ENTRYPOINT ["./entrypoint.sh"]

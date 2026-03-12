@@ -15,6 +15,7 @@ spec:
       containers:
       - name: api
         image: agrocd-api:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
 ---

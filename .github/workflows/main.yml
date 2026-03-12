@@ -25,6 +25,10 @@ jobs:
           docker build -t ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }} .
           docker tag ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }} ${{ env.IMAGE_NAME }}:latest
 
+      - name: Load image to Kind
+        run: |
+          kind load docker-image ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }} --name agrocd
+
   deploy-dev:
     needs: build
     runs-on: self-hosted
@@ -36,26 +40,38 @@ jobs:
           cd gitops/overlays/dev
           kustomize edit set image agrocd-api=${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image_tag }}
           
-      - name: Commit and Push changes
+      - name: Apply Dev manifests
+        run: |
+          kubectl apply -k gitops/overlays/dev
+          
+      - name: Commit and Push changes (Dev)
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add gitops/overlays/dev/kustomization.yaml
-          git commit -m "Update dev image to ${{ needs.build.outputs.image_tag }}"
-          # git push # Commented out as this is a local simulation
+          git commit -m "Update dev image to ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
+          git push
 
   validation:
     needs: [build, deploy-dev]
     runs-on: self-hosted
     steps:
       - name: Wait for ArgoCD sync
-        run: sleep 30 # Simple wait for demonstration
+        run: |
+          # Wait for the new version to be rolled out by ArgoCD
+          kubectl rollout status deployment/agrocd-api -n api-dev --timeout=120s
 
       - name: Integration Tests
         run: |
-          # Simple smoke test against dev endpoint
-          # curl -f http://dev.local/weatherforecast
-          echo "Integration tests passed against dev.local"
+          # Use the Host header to hit the dev environment via Ingress
+          RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: dev.local" http://localhost/weatherforecast)
+          
+          if [ "$RESPONSE_CODE" -eq 200 ]; then
+            echo "Integration tests passed against dev.local"
+          else
+            echo "Integration tests failed with HTTP $RESPONSE_CODE"
+            exit 1
+          fi
 
   promotion:
     needs: [build, validation]
@@ -68,10 +84,14 @@ jobs:
           cd gitops/overlays/test
           kustomize edit set image agrocd-api=${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image_tag }}
 
-      - name: Commit and Push changes
+      - name: Apply Test manifests
+        run: |
+          kubectl apply -k gitops/overlays/test
+
+      - name: Commit and Push changes (Test)
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add gitops/overlays/test/kustomization.yaml
-          git commit -m "Promote image to test: ${{ needs.build.outputs.image_tag }}"
-          # git push # Commented out as this is a local simulation
+          git commit -m "Promote image to test: ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
+          git push
