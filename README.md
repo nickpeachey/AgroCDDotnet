@@ -9,6 +9,7 @@ This repository deploys a .NET Todo API with ArgoCD, Postgres, and a separate da
 * `api-dev` tracks `release/dev`, while `api-test` tracks `release/test`.
 * `main` is the source branch. The workflow publishes validated deployment state to the release branches.
 * CI logs now print the exact `release/dev` and `release/test` commit revisions pushed for deployment so Argo sync issues can be traced to branch state vs cluster state.
+* ArgoCD is installed with server-side apply because the `ApplicationSet` CRD can exceed the client-side apply annotation limit.
 
 ## Database credentials
 
@@ -46,6 +47,18 @@ Verify the in-cluster secrets exist:
 ```bash
 kubectl get secret ghcr-pull-secret -n api-dev
 kubectl get secret ghcr-pull-secret -n api-test
+```
+
+## Release branch bootstrap
+
+`api-dev` renders from `release/dev` and `api-test` renders from `release/test`, not from `main`.
+
+If `release/test` has never been created yet, bootstrap it once from `release/dev`:
+
+```bash
+git fetch origin
+git checkout -B release/test origin/release/dev
+git push -u origin release/test
 ```
 
 ## Rollback behavior

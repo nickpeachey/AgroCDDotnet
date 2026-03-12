@@ -28,10 +28,14 @@ kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.
 
 echo "--- 4. Install ArgoCD ---"
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/$ARGOCD_VERSION/manifests/install.yaml
+# Use server-side apply so the large ApplicationSet CRD does not hit the client-side annotation size limit.
+kubectl apply --server-side -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/$ARGOCD_VERSION/manifests/install.yaml
 
 echo "Waiting for ArgoCD components to be ready..."
 kubectl wait --namespace argocd --for=condition=ready pod --selector=app.kubernetes.io/name=argocd-server --timeout=300s
+kubectl get crd applications.argoproj.io >/dev/null
+kubectl get crd appprojects.argoproj.io >/dev/null
+kubectl get crd applicationsets.argoproj.io >/dev/null
 
 echo "--- 5. Create Application Namespaces ---"
 kubectl create namespace api-dev --dry-run=client -o yaml | kubectl apply -f -
@@ -75,8 +79,10 @@ echo "kubectl port-forward svc/argocd-server -n argocd 8081:443"
 echo "URL: https://localhost:8081"
 echo ""
 echo "ArgoCD will deploy Postgres, the database migrator job, and the API into api-dev and api-test."
+echo "api-dev tracks release/dev and api-test tracks release/test."
 echo ""
 echo "Next steps:"
 echo "1. Configure your .env file with GITHUB_URL and GITHUB_TOKEN."
-echo "2. Start the local runner: docker-compose -f docker-compose.runner.yml up --build -d"
-echo "3. Follow instructions in INSTALL.md for GitHub Repository Settings."
+echo "2. Configure GitHub Actions repository secrets GHCR_PULL_USERNAME and GHCR_PULL_PASSWORD."
+echo "3. Start the local runner: docker-compose -f docker-compose.runner.yml up --build -d"
+echo "4. Follow instructions in INSTALL.md for GitHub Repository Settings and release branch bootstrap."

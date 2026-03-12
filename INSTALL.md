@@ -24,7 +24,7 @@ chmod +x install.sh
 **The script will:**
 1.  Create a local `kind` cluster with Ingress port-mapping (80, 443).
 2.  Install the **NGINX Ingress Controller**.
-3.  Install **ArgoCD**.
+3.  Install **ArgoCD** using server-side apply so the `ApplicationSet` CRD is created cleanly.
 4.  Configure `api-dev` and `api-test` namespaces.
 5.  Deploy the ArgoCD Applications defined in `argocd-apps.yaml`.
 6.  Prepare ArgoCD to manage Postgres, the database migration job, and the API in both environments.
@@ -43,6 +43,19 @@ Go to your GitHub repository under **Settings** -> **Actions** -> **General**.
 ### 2. Update ArgoCD URL
 1.  Open `argocd-apps.yaml` and update `repoURL` to point to your actual GitHub repository.
 2.  Apply the change with `kubectl apply -f argocd-apps.yaml`.
+
+### 3. Release Branches
+ArgoCD does not track `main` directly:
+* `api-dev` tracks `release/dev`
+* `api-test` tracks `release/test`
+
+The workflow publishes deployment state to those branches. `release/test` must exist before `api-test` can render successfully. If it does not exist yet, bootstrap it once from `release/dev`:
+
+```bash
+git fetch origin
+git checkout -B release/test origin/release/dev
+git push -u origin release/test
+```
 
 ---
 
@@ -135,6 +148,8 @@ Push a change to `main` to trigger the full path.
 *   The `api-test` ArgoCD application tracks `release/test`, so test only syncs after promotion.
 *   The test Postgres instance uses a persistent volume claim bound to a dedicated persistent volume.
 
+ArgoCD test may still finish syncing a previously promoted `release/test` commit while a newer dev validation is running. What is guaranteed is that the current candidate from `main` is not promoted to `release/test` until validation passes.
+
 ### 5. Validation Failure Behavior
 *   If validation fails after `api-dev` is updated, promotion to `release/test` does not occur.
 *   `api-test` therefore remains on its last promoted state.
@@ -220,3 +235,11 @@ kubectl get secret postgres-secrets -n api-test -o jsonpath='{.data.TODOS_DATABA
 2.  Open: `https://localhost:8081`
 3.  User: `admin`
 4.  Password: retrieve it during `install.sh`
+
+**Verification commands:**
+```bash
+kubectl get crd applications.argoproj.io
+kubectl get crd appprojects.argoproj.io
+kubectl get crd applicationsets.argoproj.io
+kubectl get applications -n argocd
+```
