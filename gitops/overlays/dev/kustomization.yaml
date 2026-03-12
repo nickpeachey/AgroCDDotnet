@@ -15,7 +15,7 @@ patches:
 images:
 - name: agrocd-api
   newName: ghcr.io/nickpeachey/agrocd-api
-  newTag: 76239ab
+  newTag: 5b9bac4
 - name: agrocd-db-migrator
   newName: ghcr.io/nickpeachey/agrocd-db-migrator
-  newTag: 76239ab
+  newTag: 5b9bac4
