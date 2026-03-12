@@ -28,6 +28,7 @@ chmod +x install.sh
 4.  Configure `api-dev` and `api-test` namespaces.
 5.  Deploy the ArgoCD Applications defined in `argocd-apps.yaml`.
 6.  Prepare ArgoCD to manage Postgres, the database migration job, and the API in both environments.
+7.  Create namespaces ready for the workflow to populate `ghcr-pull-secret` automatically from GitHub Actions secrets.
 
 ---
 
@@ -61,6 +62,13 @@ GITHUB_URL=https://github.com/your-username/your-repo
 GITHUB_TOKEN=PASTE_COPIED_TOKEN_HERE
 ```
 
+Configure these repository secrets in GitHub Actions:
+
+```text
+GHCR_PULL_USERNAME=your-github-username
+GHCR_PULL_PASSWORD=your-github-pat-with-read-packages
+```
+
 ### 3. Start the Runner
 ```bash
 docker-compose -f docker-compose.runner.yml up --build -d
@@ -75,6 +83,28 @@ docker-compose -f docker-compose.runner.yml up --build -d --force-recreate
 **Verification:** Check the logs until the runner is listening for jobs:
 ```bash
 docker logs -f github-runner
+```
+
+### 4. GHCR Pull Secrets
+
+The API and migrator images are private GHCR images. The workflow now creates or updates `ghcr-pull-secret` automatically in `api-dev` and `api-test` using the `GHCR_PULL_USERNAME` and `GHCR_PULL_PASSWORD` GitHub Actions secrets.
+
+Manual creation is still available if needed:
+
+```bash
+kubectl create secret docker-registry ghcr-pull-secret \
+  --namespace api-dev \
+  --docker-server=ghcr.io \
+  --docker-username=<github-username> \
+  --docker-password=<github-pat-with-read-packages> \
+  --docker-email=unused@example.com
+
+kubectl create secret docker-registry ghcr-pull-secret \
+  --namespace api-test \
+  --docker-server=ghcr.io \
+  --docker-username=<github-username> \
+  --docker-password=<github-pat-with-read-packages> \
+  --docker-email=unused@example.com
 ```
 
 ---
