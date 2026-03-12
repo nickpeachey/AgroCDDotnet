@@ -164,20 +164,28 @@ jobs:
         run: |
           EXPECTED_API_IMAGE="${{ needs.build.outputs.api_image }}"
           EXPECTED_DB_IMAGE="${{ needs.build.outputs.db_image }}"
-          EXPECTED_REVISION="${{ needs.deploy-dev.outputs.release_dev_revision }}"
           CURRENT_API_IMAGE=""
           CURRENT_DB_IMAGE=""
           CURRENT_REVISION=""
+          CURRENT_SYNC_STATUS=""
+          CURRENT_OPERATION_PHASE=""
 
           for _ in $(seq 1 60); do
             CURRENT_API_IMAGE=$(kubectl get deployment/agrocd-api -n api-dev -o jsonpath='{.spec.template.spec.containers[0].image}')
             CURRENT_DB_IMAGE=$(kubectl get job/agrocd-db-migrator -n api-dev -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)
             CURRENT_REVISION=$(kubectl get application api-dev -n argocd -o jsonpath='{.status.sync.revision}')
+            CURRENT_SYNC_STATUS=$(kubectl get application api-dev -n argocd -o jsonpath='{.status.sync.status}')
+            CURRENT_OPERATION_PHASE=$(kubectl get application api-dev -n argocd -o jsonpath='{.status.operationState.phase}')
             echo "Current API image: $CURRENT_API_IMAGE"
             echo "Current DB migrator image: $CURRENT_DB_IMAGE"
             echo "Current Argo revision: $CURRENT_REVISION"
+            echo "Current Argo sync status: $CURRENT_SYNC_STATUS"
+            echo "Current Argo operation phase: $CURRENT_OPERATION_PHASE"
 
-            if [ "$CURRENT_API_IMAGE" = "$EXPECTED_API_IMAGE" ] && [ "$CURRENT_DB_IMAGE" = "$EXPECTED_DB_IMAGE" ] && [ "$CURRENT_REVISION" = "$EXPECTED_REVISION" ]; then
+            if [ "$CURRENT_API_IMAGE" = "$EXPECTED_API_IMAGE" ] && \
+               [ "$CURRENT_DB_IMAGE" = "$EXPECTED_DB_IMAGE" ] && \
+               [ "$CURRENT_SYNC_STATUS" = "Synced" ] && \
+               [ "$CURRENT_OPERATION_PHASE" = "Succeeded" ]; then
               break
             fi
 
@@ -194,10 +202,15 @@ jobs:
             exit 1
           fi
 
-          if [ "$CURRENT_REVISION" != "$EXPECTED_REVISION" ]; then
-            echo "ArgoCD application revision did not update to expected release/dev commit."
-            echo "Expected revision: $EXPECTED_REVISION"
-            echo "Actual revision: $CURRENT_REVISION"
+          if [ "$CURRENT_SYNC_STATUS" != "Synced" ]; then
+            echo "ArgoCD application did not reach Synced state."
+            echo "Actual sync status: $CURRENT_SYNC_STATUS"
+            exit 1
+          fi
+
+          if [ "$CURRENT_OPERATION_PHASE" != "Succeeded" ]; then
+            echo "ArgoCD operation did not complete successfully."
+            echo "Actual operation phase: $CURRENT_OPERATION_PHASE"
             exit 1
           fi
 
