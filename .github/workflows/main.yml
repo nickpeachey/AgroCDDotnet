@@ -50,6 +50,14 @@ jobs:
           docker push ${IMAGE_PATH}:${{ steps.vars.outputs.tag }}
           docker push ${IMAGE_PATH}:latest
 
+      - name: Cleanup runner state
+        if: always()
+        run: |
+          git clean -fdx
+          docker builder prune -af --filter "until=24h" || true
+          docker image prune -af --filter "until=24h" || true
+          df -h
+
   deploy-dev:
     needs: build
     runs-on: self-hosted
@@ -75,6 +83,12 @@ jobs:
           git pull --rebase origin main
           # Use the GITHUB_TOKEN to authorize the push
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+      - name: Cleanup runner state
+        if: always()
+        run: |
+          git clean -fdx
+          df -h
 
   validation:
     needs: [build, deploy-dev]
@@ -134,6 +148,12 @@ jobs:
             --env-var "host_header=dev.local" \
             --reporters cli
 
+      - name: Cleanup runner state
+        if: always()
+        run: |
+          git clean -fdx
+          df -h
+
   promotion:
     needs: [build, validation]
     runs-on: self-hosted
@@ -159,3 +179,9 @@ jobs:
           git pull --rebase origin main
           # Use the GITHUB_TOKEN to authorize the push
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+      - name: Cleanup runner state
+        if: always()
+        run: |
+          git clean -fdx
+          df -h
