@@ -9,6 +9,7 @@ services:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - RUNNER_NAME=local-runner-unique
       - KUBECONFIG=/home/runner/.kube/config
+      - HOME=/home/runner
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${HOME}/.kube/config:/home/runner/.kube/config:ro

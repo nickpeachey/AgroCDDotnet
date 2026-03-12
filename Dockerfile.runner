@@ -34,7 +34,7 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
     && rm kubectl
 
 # Install kind
-RUN curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-$(dpkg --print-architecture) \
+RUN curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.27.0/kind-linux-$(dpkg --print-architecture) \
     && chmod +x ./kind \
     && mv ./kind /usr/local/bin/kind
 
@@ -74,4 +74,6 @@ RUN if [ "$(dpkg --print-architecture)" = "arm64" ]; then \
     && rm actions-runner-linux-${ARCH}-${RUNNER_VERSION}.tar.gz
 
 # Note: COPY entrypoint.sh happens here now
+RUN chown runner:runner /home/runner/entrypoint.sh
+USER runner
 ENTRYPOINT ["./entrypoint.sh"]

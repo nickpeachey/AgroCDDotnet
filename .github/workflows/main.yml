@@ -6,39 +6,51 @@ on:
 
 env:
   IMAGE_NAME: agrocd-api
-  DOCKER_REGISTRY: localhost:5001 # Assuming a local registry or GHCR
+  GHCR_REGISTRY: ghcr.io
+  GHCR_USERNAME: ${{ github.repository_owner }}
 
 jobs:
   build:
     runs-on: self-hosted
     outputs:
       image_tag: ${{ steps.vars.outputs.tag }}
+      full_image: ${{ steps.vars.outputs.full_image }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Set output
         id: vars
-        run: echo "tag=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-
-      - name: Build Docker image
         run: |
-          docker build -t ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }} .
-          docker tag ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }} ${{ env.IMAGE_NAME }}:latest
+          TAG=${GITHUB_SHA::7}
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "full_image=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${TAG}" >> $GITHUB_OUTPUT
 
-      - name: Load image to Kind
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GHCR_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker image
         run: |
-          kind load docker-image ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }} --name agrocd
+          IMAGE_PATH=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          docker build -t ${IMAGE_PATH}:${{ steps.vars.outputs.tag }} -t ${IMAGE_PATH}:latest .
+          docker push ${IMAGE_PATH}:${{ steps.vars.outputs.tag }}
+          docker push ${IMAGE_PATH}:latest
 
   deploy-dev:
     needs: build
     runs-on: self-hosted
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Update Dev Kustomize
         run: |
           cd gitops/overlays/dev
-          kustomize edit set image agrocd-api=${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image_tag }}
+          kustomize edit set image agrocd-api=${{ needs.build.outputs.full_image }}
           
       - name: Apply Dev manifests
         run: |
@@ -50,7 +62,8 @@ jobs:
           git config --local user.name "GitHub Action"
           git add gitops/overlays/dev/kustomization.yaml
           git commit -m "Update dev image to ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
-          git push
+          # Use the GITHUB_TOKEN to authorize the push
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
 
   validation:
     needs: [build, deploy-dev]
@@ -76,13 +89,15 @@ jobs:
   promotion:
     needs: [build, validation]
     runs-on: self-hosted
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Update Test Kustomize
         run: |
           cd gitops/overlays/test
-          kustomize edit set image agrocd-api=${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image_tag }}
+          kustomize edit set image agrocd-api=${{ needs.build.outputs.full_image }}
 
       - name: Apply Test manifests
         run: |
@@ -94,4 +109,5 @@ jobs:
           git config --local user.name "GitHub Action"
           git add gitops/overlays/test/kustomization.yaml
           git commit -m "Promote image to test: ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
-          git push
+          # Use the GITHUB_TOKEN to authorize the push
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
