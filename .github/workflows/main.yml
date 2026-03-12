@@ -79,8 +79,11 @@ jobs:
 
       - name: Integration Tests
         run: |
-          # Use the Host header to hit the dev environment via Ingress
-          RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: dev.local" http://localhost/weatherforecast)
+          # Use the kind cluster IP to hit the dev environment via Ingress
+          # Since we are running in a container, localhost won't work
+          KIND_IP=$(docker inspect agrocd-control-plane -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+          echo "Found kind IP: $KIND_IP"
+          RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: dev.local" http://$KIND_IP/weatherforecast)
           
           if [ "$RESPONSE_CODE" -eq 200 ]; then
             echo "Integration tests passed against dev.local"
