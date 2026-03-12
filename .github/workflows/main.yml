@@ -101,6 +101,24 @@ jobs:
           fi
           git checkout -B release/dev origin/main
 
+      - name: Create or update dev GHCR pull secret
+        env:
+          GHCR_PULL_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
+          GHCR_PULL_PASSWORD: ${{ secrets.GHCR_PULL_PASSWORD }}
+        run: |
+          if [ -z "$GHCR_PULL_USERNAME" ] || [ -z "$GHCR_PULL_PASSWORD" ]; then
+            echo "GHCR_PULL_USERNAME and GHCR_PULL_PASSWORD repository secrets must be configured."
+            exit 1
+          fi
+
+          kubectl create secret docker-registry ghcr-pull-secret \
+            --namespace api-dev \
+            --docker-server=${{ env.GHCR_REGISTRY }} \
+            --docker-username="$GHCR_PULL_USERNAME" \
+            --docker-password="$GHCR_PULL_PASSWORD" \
+            --docker-email="unused@example.com" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Update Dev Kustomize
         run: |
           cd gitops/overlays/dev
@@ -232,6 +250,24 @@ jobs:
             echo "REMOTE_RELEASE_TEST_SHA=$(git rev-parse origin/release/test)" >> $GITHUB_ENV
           fi
           git checkout -B release/test origin/release/dev
+
+      - name: Create or update test GHCR pull secret
+        env:
+          GHCR_PULL_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
+          GHCR_PULL_PASSWORD: ${{ secrets.GHCR_PULL_PASSWORD }}
+        run: |
+          if [ -z "$GHCR_PULL_USERNAME" ] || [ -z "$GHCR_PULL_PASSWORD" ]; then
+            echo "GHCR_PULL_USERNAME and GHCR_PULL_PASSWORD repository secrets must be configured."
+            exit 1
+          fi
+
+          kubectl create secret docker-registry ghcr-pull-secret \
+            --namespace api-test \
+            --docker-server=${{ env.GHCR_REGISTRY }} \
+            --docker-username="$GHCR_PULL_USERNAME" \
+            --docker-password="$GHCR_PULL_PASSWORD" \
+            --docker-email="unused@example.com" \
+            --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Update Test Kustomize
         run: |

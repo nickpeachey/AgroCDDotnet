@@ -32,6 +32,22 @@ kubectl get secret postgres-secrets -n api-test -o jsonpath='{.data.POSTGRES_DB}
 kubectl get secret postgres-secrets -n api-test -o jsonpath='{.data.TODOS_DATABASE_CONNECTION_STRING}' | base64 -d && echo
 ```
 
+## GHCR pull secret
+
+The workflow creates or updates a Kubernetes secret named `ghcr-pull-secret` in `api-dev` and `api-test` from these GitHub Actions repository secrets:
+
+```text
+GHCR_PULL_USERNAME
+GHCR_PULL_PASSWORD
+```
+
+Verify the in-cluster secrets exist:
+
+```bash
+kubectl get secret ghcr-pull-secret -n api-dev
+kubectl get secret ghcr-pull-secret -n api-test
+```
+
 ## Rollback behavior
 
 If dev validation fails, promotion to `release/test` does not happen.
