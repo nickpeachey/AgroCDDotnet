@@ -70,4 +70,13 @@ public sealed class TodoEndpointTests : IClassFixture<CustomWebApplicationFactor
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    [Fact]
+    [Trait("TestTarget", "InMemory")]
+    public async Task SwaggerJson_IsAvailable()
+    {
+        var response = await _client.GetAsync("/swagger/v1/swagger.json");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
 }

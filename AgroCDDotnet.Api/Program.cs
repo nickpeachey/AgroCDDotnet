@@ -10,15 +10,15 @@ public class Program
 
         builder.Services.AddAuthorization();
         builder.Services.AddOpenApi();
+        builder.Services.AddSwaggerGen();
         builder.Services.AddSingleton<ITodoRepository>(_ =>
             new PostgresTodoRepository(builder.Configuration.GetConnectionString("TodosDatabase")));
 
         var app = builder.Build();
 
-        if (app.Environment.IsDevelopment())
-        {
-            app.MapOpenApi();
-        }
+        app.MapOpenApi();
+        app.UseSwagger();
+        app.UseSwaggerUI();
 
         app.UseHttpsRedirection();
         app.UseAuthorization();

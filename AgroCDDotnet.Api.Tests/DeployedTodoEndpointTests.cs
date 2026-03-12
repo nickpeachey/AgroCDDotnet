@@ -46,4 +46,13 @@ public sealed class DeployedTodoEndpointTests : IClassFixture<DeployedApiFixture
         var deleteResponse = await _client.DeleteAsync($"/todos/{createdTodo.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
     }
+
+    [Fact]
+    [Trait("TestTarget", "Deployed")]
+    public async Task SwaggerJson_IsAvailableInDeployedEnvironment()
+    {
+        var response = await _client.GetAsync("/swagger/v1/swagger.json");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
 }
