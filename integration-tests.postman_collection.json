@@ -1,0 +1,75 @@
+{
+	"info": {
+		"_postman_id": "03857e0f-902c-4b68-8095-23e3195826f5",
+		"name": "AgroCDDotnet Integration Tests",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Get Weather Forecast",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response is an array\", function () {",
+							"    pm.expect(pm.response.json()).to.be.an('array');",
+							"});",
+							"",
+							"pm.test(\"Array contains 5 pieces of content\", function () {",
+							"    pm.expect(pm.response.json().length).to.equal(5);",
+							"});",
+							"",
+							"pm.test(\"Each object has correct structure\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    jsonData.forEach(function(item) {",
+							"        pm.expect(item).to.have.property('date');",
+							"        pm.expect(item).to.have.property('temperatureC');",
+							"        pm.expect(item).to.have.property('summary');",
+							"        pm.expect(item).to.have.property('temperatureF');",
+							"    });",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Host",
+						"value": "{{host_header}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"protocol": "http",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"weatherforecast"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "localhost",
+			"type": "string"
+		},
+		{
+			"key": "host_header",
+			"value": "dev.local",
+			"type": "string"
+		}
+	]
+}

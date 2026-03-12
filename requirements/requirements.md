@@ -28,7 +28,10 @@ Build Phase: Triggered on push to main. Build Docker image and push to registry.
 
 Dev Deployment: Update the gitops/dev Kustomize patch with the new image tag.
 
-Validation: Run automated integration tests against the api-dev endpoint.
+Validation: Run automated integration tests using **Postman & Newman** against the api-dev endpoint. Tests include:
+  - Verifying HTTP 200 response.
+  - Ensuring the response is an array with 5 entries.
+  - Validating the schema of the JSON objects (Date, TemperatureC, Summary).
 
 Promotion: If tests pass, the workflow updates the gitops/test patch, triggering ArgoCD to sync the test environment.
 

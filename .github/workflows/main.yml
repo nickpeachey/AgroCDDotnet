@@ -76,6 +76,8 @@ jobs:
     needs: [build, deploy-dev]
     runs-on: self-hosted
     steps:
+      - uses: actions/checkout@v4
+      
       - name: Wait for ArgoCD sync
         run: |
           # Wait for the new version to be rolled out by ArgoCD
@@ -87,14 +89,12 @@ jobs:
           # Since we are running in a container, localhost won't work
           KIND_IP=$(docker inspect agrocd-control-plane -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
           echo "Found kind IP: $KIND_IP"
-          RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: dev.local" http://$KIND_IP/weatherforecast)
           
-          if [ "$RESPONSE_CODE" -eq 200 ]; then
-            echo "Integration tests passed against dev.local"
-          else
-            echo "Integration tests failed with HTTP $RESPONSE_CODE"
-            exit 1
-          fi
+          # Run Postman tests using Newman
+          newman run integration-tests.postman_collection.json \
+            --env-var "base_url=$KIND_IP" \
+            --env-var "host_header=dev.local" \
+            --reporters cli
 
   promotion:
     needs: [build, validation]
