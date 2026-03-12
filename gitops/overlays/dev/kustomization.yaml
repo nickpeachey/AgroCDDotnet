@@ -4,14 +4,14 @@ resources:
 - ../../base
 namespace: api-dev
 patches:
-- target:
-    kind: Ingress
-    name: agrocd-api
-  patch: |-
+- patch: |-
     - op: replace
       path: /spec/rules/0/host
       value: dev.local
+  target:
+    kind: Ingress
+    name: agrocd-api
 images:
 - name: agrocd-api
-  newName: agrocd-api
-  newTag: v1.0.0-test
+  newName: ghcr.io/nickpeachey/agrocd-api
+  newTag: f9bb5c1
