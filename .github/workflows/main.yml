@@ -4,6 +4,10 @@ on:
   push:
     branches: [ main ]
 
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
 env:
   API_IMAGE_NAME: agrocd-api
   DB_IMAGE_NAME: agrocd-db-migrator
@@ -93,6 +97,7 @@ jobs:
           git fetch origin main
           if git ls-remote --exit-code --heads origin release/dev; then
             git fetch origin release/dev
+            echo "REMOTE_RELEASE_DEV_SHA=$(git rev-parse origin/release/dev)" >> $GITHUB_ENV
           fi
           git checkout -B release/dev origin/main
 
@@ -109,7 +114,11 @@ jobs:
           git config --local user.name "GitHub Action"
           git add .
           git commit -m "Update dev images to ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
-          git push --force-with-lease https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/dev
+          if [ -n "${REMOTE_RELEASE_DEV_SHA:-}" ]; then
+            git push --force-with-lease=refs/heads/release/dev:${REMOTE_RELEASE_DEV_SHA} https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/dev
+          else
+            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/dev
+          fi
           RELEASE_DEV_REVISION=$(git rev-parse HEAD)
           echo "release_dev_revision=${RELEASE_DEV_REVISION}" >> $GITHUB_OUTPUT
           echo "Pushed release/dev revision: ${RELEASE_DEV_REVISION}"
@@ -220,6 +229,7 @@ jobs:
           git fetch origin release/dev
           if git ls-remote --exit-code --heads origin release/test; then
             git fetch origin release/test
+            echo "REMOTE_RELEASE_TEST_SHA=$(git rev-parse origin/release/test)" >> $GITHUB_ENV
           fi
           git checkout -B release/test origin/release/dev
 
@@ -236,7 +246,11 @@ jobs:
           git config --local user.name "GitHub Action"
           git add .
           git commit -m "Promote app and db images to test: ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
-          git push --force-with-lease https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/test
+          if [ -n "${REMOTE_RELEASE_TEST_SHA:-}" ]; then
+            git push --force-with-lease=refs/heads/release/test:${REMOTE_RELEASE_TEST_SHA} https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/test
+          else
+            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/test
+          fi
           RELEASE_TEST_REVISION=$(git rev-parse HEAD)
           echo "release_test_revision=${RELEASE_TEST_REVISION}" >> $GITHUB_OUTPUT
           echo "Pushed release/test revision: ${RELEASE_TEST_REVISION}"
