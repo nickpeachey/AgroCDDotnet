@@ -49,6 +49,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Update Dev Kustomize
         run: |
@@ -65,6 +67,8 @@ jobs:
           git config --local user.name "GitHub Action"
           git add gitops/overlays/dev/kustomization.yaml
           git commit -m "Update dev image to ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
+          # Pull latest changes before pushing to avoid conflicts
+          git pull --rebase origin main
           # Use the GITHUB_TOKEN to authorize the push
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
 
@@ -99,6 +103,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Update Test Kustomize
         run: |
@@ -115,5 +121,7 @@ jobs:
           git config --local user.name "GitHub Action"
           git add gitops/overlays/test/kustomization.yaml
           git commit -m "Promote image to test: ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
+          # Pull latest changes before pushing to avoid conflicts
+          git pull --rebase origin main
           # Use the GITHUB_TOKEN to authorize the push
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
