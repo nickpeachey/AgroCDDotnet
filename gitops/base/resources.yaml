@@ -88,6 +88,8 @@ spec:
       labels:
         app: agrocd-db-migrator
     spec:
+      imagePullSecrets:
+      - name: ghcr-pull-secret
       restartPolicy: OnFailure
       containers:
       - name: migrator
@@ -117,6 +119,8 @@ spec:
       labels:
         app: agrocd-api
     spec:
+      imagePullSecrets:
+      - name: ghcr-pull-secret
       containers:
       - name: api
         image: agrocd-api:latest
