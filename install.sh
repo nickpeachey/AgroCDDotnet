@@ -5,6 +5,9 @@ set -e
 CLUSTER_NAME="agrocd"
 KIND_CONFIG="kind-config.yaml"
 ARGOCD_VERSION="stable"
+GHCR_SERVER="${GHCR_SERVER:-ghcr.io}"
+GHCR_PULL_USERNAME="${GHCR_PULL_USERNAME:-}"
+GHCR_PULL_PASSWORD="${GHCR_PULL_PASSWORD:-}"
 
 echo "--- 1. Prerequisites Check ---"
 command -v docker >/dev/null 2>&1 || { echo "Docker is required but not installed. Aborting." >&2; exit 1; }
@@ -34,14 +37,35 @@ echo "--- 5. Create Application Namespaces ---"
 kubectl create namespace api-dev --dry-run=client -o yaml | kubectl apply -f -
 kubectl create namespace api-test --dry-run=client -o yaml | kubectl apply -f -
 
-echo "--- 6. Apply ArgoCD Applications ---"
+echo "--- 6. Create GHCR Pull Secrets ---"
+if [ -n "$GHCR_PULL_USERNAME" ] && [ -n "$GHCR_PULL_PASSWORD" ]; then
+    kubectl create secret docker-registry ghcr-pull-secret \
+        --namespace api-dev \
+        --docker-server="$GHCR_SERVER" \
+        --docker-username="$GHCR_PULL_USERNAME" \
+        --docker-password="$GHCR_PULL_PASSWORD" \
+        --docker-email="unused@example.com" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    kubectl create secret docker-registry ghcr-pull-secret \
+        --namespace api-test \
+        --docker-server="$GHCR_SERVER" \
+        --docker-username="$GHCR_PULL_USERNAME" \
+        --docker-password="$GHCR_PULL_PASSWORD" \
+        --docker-email="unused@example.com" \
+        --dry-run=client -o yaml | kubectl apply -f -
+else
+    echo "GHCR pull secret not created. Set GHCR_PULL_USERNAME and GHCR_PULL_PASSWORD before running install.sh."
+fi
+
+echo "--- 7. Apply ArgoCD Applications ---"
 if [ -f "argocd-apps.yaml" ]; then
     kubectl apply -f argocd-apps.yaml
 else
     echo "Warning: argocd-apps.yaml not found. Skipping."
 fi
 
-echo "--- 7. Setup Complete ---"
+echo "--- 8. Setup Complete ---"
 echo ""
 echo "ArgoCD initial admin password:"
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo ""
