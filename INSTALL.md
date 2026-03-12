@@ -7,7 +7,8 @@ This project establishes a local Kubernetes-based GitOps environment using **Kin
 *   **Docker Desktop** (with enough resources allocated).
 *   **kubectl** (v1.30+).
 *   **Kind** (v0.25+).
-*   **Personal Access Token (PAT)** from GitHub with `write:packages` and `repo` scopes.
+*   **Personal Access Token (PAT)** from GitHub with `write:packages`, `read:packages`, and `repo` scopes.
+*   **Node.js** (If running integration tests manually).
 
 ---
 

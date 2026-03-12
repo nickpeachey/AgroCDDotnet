@@ -28,16 +28,16 @@ Build Phase: Triggered on push to main. Build Docker image and push to registry.
 
 Dev Deployment: Update the gitops/dev Kustomize patch with the new image tag.
 
-Validation: Run automated integration tests using **Postman & Newman** against the api-dev endpoint. Tests include:
+Validation: Run automated integration tests using **Postman & Newman** against the api-dev endpoint. Tests are executed by the containerized GitHub runner. Assertions include:
   - Verifying HTTP 200 response.
   - Ensuring the response is an array with 5 entries.
-  - Validating the schema of the JSON objects (Date, TemperatureC, Summary).
+  - Validating the schema of the JSON objects (Date, TemperatureC, Summary, TemperatureF).
 
 Promotion: If tests pass, the workflow updates the gitops/test patch, triggering ArgoCD to sync the test environment.
 
 5. Infrastructure Requirements
 
-Local Runner: A self-hosted GitHub Actions runner configured on the local machine. It can be run directly or via Docker Compose.
+Local Runner: A self-hosted GitHub Actions runner configured via Docker Compose (highly recommended) or manual setup. The Docker-based runner is pre-configured with all necessary tools (.NET 10, kubectl, kind, kustomize, and Newman).
 
 To set up the runner (Docker Compose recommended):
 1. Create a `.env` file with `GITHUB_URL` and `GITHUB_TOKEN`.
