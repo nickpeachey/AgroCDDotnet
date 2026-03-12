@@ -10,10 +10,11 @@ public sealed class PostgresTestContainer : IAsyncLifetime
     private readonly string _database = "agrocdtodos";
     private readonly string _username = "postgres";
     private readonly string _password = "postgres";
+    private readonly string _host = IsRunningInsideContainer() ? "host.docker.internal" : "127.0.0.1";
     private int _hostPort;
 
     public string ConnectionString =>
-        $"Host=127.0.0.1;Port={_hostPort};Database={_database};Username={_username};Password={_password}";
+        $"Host={_host};Port={_hostPort};Database={_database};Username={_username};Password={_password}";
 
     public async Task InitializeAsync()
     {
@@ -68,6 +69,9 @@ public sealed class PostgresTestContainer : IAsyncLifetime
         listener.Stop();
         return port;
     }
+
+    private static bool IsRunningInsideContainer() =>
+        File.Exists("/.dockerenv");
 
     private static async Task RunDockerCommandAsync(IReadOnlyList<string> arguments, bool ignoreExitCode = false)
     {
