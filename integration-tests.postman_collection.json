@@ -1,12 +1,12 @@
 {
 	"info": {
-		"_postman_id": "03857e0f-902c-4b68-8095-23e3195826f5",
-		"name": "AgroCDDotnet Integration Tests",
+		"_postman_id": "9d8ceb83-6d2e-4356-97dd-8e89244332af",
+		"name": "AgroCDDotnet Todo Integration Tests",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
 		{
-			"name": "Get Greeting",
+			"name": "Health Check",
 			"event": [
 				{
 					"listen": "test",
@@ -16,10 +16,9 @@
 							"    pm.response.to.have.status(200);",
 							"});",
 							"",
-							"pm.test(\"Response contains the greeting\", function () {",
+							"pm.test(\"Database health is ok\", function () {",
 							"    const jsonData = pm.response.json();",
-							"    pm.expect(jsonData).to.have.property('message');",
-							"    pm.expect(jsonData.message).to.equal('Hello, Nick!');",
+							"    pm.expect(jsonData.status).to.equal('ok');",
 							"});"
 						],
 						"type": "text/javascript"
@@ -41,20 +40,69 @@
 						"{{base_url}}"
 					],
 					"path": [
-						"hello"
-					],
-					"query": [
-						{
-							"key": "name",
-							"value": "Nick"
-						}
+						"healthz"
 					]
 				}
 			},
 			"response": []
 		},
 		{
-			"name": "Get Weather Forecast",
+			"name": "Create Todo",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 201\", function () {",
+							"    pm.response.to.have.status(201);",
+							"});",
+							"",
+							"const jsonData = pm.response.json();",
+							"pm.collectionVariables.set('todo_id', jsonData.id);",
+							"pm.collectionVariables.set('todo_title', jsonData.title);",
+							"",
+							"pm.test(\"Created todo has expected shape\", function () {",
+							"    pm.expect(jsonData.title).to.include('Postman todo');",
+							"    pm.expect(jsonData.isCompleted).to.equal(false);",
+							"    pm.expect(jsonData.createdAtUtc).to.exist;",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Host",
+						"value": "{{host_header}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"title\": \"Postman todo {{$guid}}\",\n  \"isCompleted\": false\n}"
+				},
+				"url": {
+					"protocol": "http",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"todos"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Todo",
 			"event": [
 				{
 					"listen": "test",
@@ -64,22 +112,9 @@
 							"    pm.response.to.have.status(200);",
 							"});",
 							"",
-							"pm.test(\"Response is an array\", function () {",
-							"    pm.expect(pm.response.json()).to.be.an('array');",
-							"});",
-							"",
-							"pm.test(\"Array contains 5 pieces of content\", function () {",
-							"    pm.expect(pm.response.json().length).to.equal(5);",
-							"});",
-							"",
-							"pm.test(\"Each object has correct structure\", function () {",
+							"pm.test(\"Fetched todo matches created id\", function () {",
 							"    const jsonData = pm.response.json();",
-							"    jsonData.forEach(function(item) {",
-							"        pm.expect(item).to.have.property('date');",
-							"        pm.expect(item).to.have.property('temperatureC');",
-							"        pm.expect(item).to.have.property('summary');",
-							"        pm.expect(item).to.have.property('temperatureF');",
-							"    });",
+							"    pm.expect(jsonData.id).to.equal(pm.collectionVariables.get('todo_id'));",
 							"});"
 						],
 						"type": "text/javascript"
@@ -101,7 +136,97 @@
 						"{{base_url}}"
 					],
 					"path": [
-						"weatherforecast"
+						"todos",
+						"{{todo_id}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update Todo",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Todo is updated\", function () {",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData.isCompleted).to.equal(true);",
+							"    pm.expect(jsonData.updatedAtUtc).to.exist;",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Host",
+						"value": "{{host_header}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"title\": \"Updated {{todo_title}}\",\n  \"isCompleted\": true\n}"
+				},
+				"url": {
+					"protocol": "http",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"todos",
+						"{{todo_id}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete Todo",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 204\", function () {",
+							"    pm.response.to.have.status(204);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Host",
+						"value": "{{host_header}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"protocol": "http",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"todos",
+						"{{todo_id}}"
 					]
 				}
 			},

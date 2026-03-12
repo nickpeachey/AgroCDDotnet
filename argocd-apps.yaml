@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: 'https://github.com/nickpeachey/AgroCDDotnet'
-    targetRevision: HEAD
+    targetRevision: release/dev
     path: gitops/overlays/dev
   destination:
     server: 'https://kubernetes.default.svc'
@@ -30,7 +30,7 @@ spec:
   project: default
   source:
     repoURL: 'https://github.com/nickpeachey/AgroCDDotnet'
-    targetRevision: HEAD
+    targetRevision: release/test
     path: gitops/overlays/test
   destination:
     server: 'https://kubernetes.default.svc'

@@ -5,7 +5,8 @@ on:
     branches: [ main ]
 
 env:
-  IMAGE_NAME: agrocd-api
+  API_IMAGE_NAME: agrocd-api
+  DB_IMAGE_NAME: agrocd-db-migrator
   GHCR_REGISTRY: ghcr.io
   GHCR_USERNAME: ${{ github.repository_owner }}
 
@@ -17,7 +18,8 @@ jobs:
       packages: write
     outputs:
       image_tag: ${{ steps.vars.outputs.tag }}
-      full_image: ${{ steps.vars.outputs.full_image }}
+      api_image: ${{ steps.vars.outputs.api_image }}
+      db_image: ${{ steps.vars.outputs.db_image }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,15 +28,18 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Run in-memory .NET integration tests
+      - name: Run Postgres-backed .NET integration tests
         run: dotnet test AgroCDDotnet.Api.Tests/AgroCDDotnet.Api.Tests.csproj --configuration Release --filter "TestTarget=InMemory"
 
       - name: Set output
         id: vars
         run: |
           TAG=${GITHUB_SHA::7}
+          API_IMAGE=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/${{ env.API_IMAGE_NAME }}:${TAG}
+          DB_IMAGE=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/${{ env.DB_IMAGE_NAME }}:${TAG}
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "full_image=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${TAG}" >> $GITHUB_OUTPUT
+          echo "api_image=${API_IMAGE}" >> $GITHUB_OUTPUT
+          echo "db_image=${DB_IMAGE}" >> $GITHUB_OUTPUT
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -43,19 +48,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Docker image
+      - name: Build and push API image
         run: |
-          IMAGE_PATH=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          IMAGE_PATH=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/${{ env.API_IMAGE_NAME }}
           docker build -t ${IMAGE_PATH}:${{ steps.vars.outputs.tag }} -t ${IMAGE_PATH}:latest .
+          docker push ${IMAGE_PATH}:${{ steps.vars.outputs.tag }}
+          docker push ${IMAGE_PATH}:latest
+
+      - name: Build and push database migrator image
+        run: |
+          IMAGE_PATH=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/${{ env.DB_IMAGE_NAME }}
+          docker build -f Dockerfile.database -t ${IMAGE_PATH}:${{ steps.vars.outputs.tag }} -t ${IMAGE_PATH}:latest .
           docker push ${IMAGE_PATH}:${{ steps.vars.outputs.tag }}
           docker push ${IMAGE_PATH}:latest
 
       - name: Cleanup runner state
         if: always()
         run: |
-          IMAGE_PATH=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          API_IMAGE_PATH=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/${{ env.API_IMAGE_NAME }}
+          DB_IMAGE_PATH=${{ env.GHCR_REGISTRY }}/${{ github.repository_owner }}/${{ env.DB_IMAGE_NAME }}
           docker system df || true
-          docker image rm ${IMAGE_PATH}:${{ steps.vars.outputs.tag }} ${IMAGE_PATH}:latest || true
+          docker image rm ${API_IMAGE_PATH}:${{ steps.vars.outputs.tag }} ${API_IMAGE_PATH}:latest || true
+          docker image rm ${DB_IMAGE_PATH}:${{ steps.vars.outputs.tag }} ${DB_IMAGE_PATH}:latest || true
           git clean -fdx
           docker builder prune -af || true
           docker image prune -af || true
@@ -72,21 +86,27 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Prepare release/dev branch
+        run: |
+          git fetch origin main
+          if git ls-remote --exit-code --heads origin release/dev; then
+            git fetch origin release/dev
+          fi
+          git checkout -B release/dev origin/main
+
       - name: Update Dev Kustomize
         run: |
           cd gitops/overlays/dev
-          kustomize edit set image agrocd-api=${{ needs.build.outputs.full_image }}
-          
+          kustomize edit set image agrocd-api=${{ needs.build.outputs.api_image }}
+          kustomize edit set image agrocd-db-migrator=${{ needs.build.outputs.db_image }}
+
       - name: Commit and Push changes (Dev)
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add gitops/overlays/dev/kustomization.yaml
-          git commit -m "Update dev image to ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
-          # Pull latest changes before pushing to avoid conflicts
-          git pull --rebase origin main
-          # Use the GITHUB_TOKEN to authorize the push
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git add .
+          git commit -m "Update dev images to ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
+          git push --force-with-lease https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/dev
 
       - name: Cleanup runner state
         if: always()
@@ -107,30 +127,39 @@ jobs:
 
       - name: Wait for ArgoCD sync
         run: |
-          EXPECTED_IMAGE="${{ needs.build.outputs.full_image }}"
-          CURRENT_IMAGE=""
+          EXPECTED_API_IMAGE="${{ needs.build.outputs.api_image }}"
+          EXPECTED_DB_IMAGE="${{ needs.build.outputs.db_image }}"
+          CURRENT_API_IMAGE=""
+          CURRENT_DB_IMAGE=""
 
           for _ in $(seq 1 60); do
-            CURRENT_IMAGE=$(kubectl get deployment/agrocd-api -n api-dev -o jsonpath='{.spec.template.spec.containers[0].image}')
-            echo "Current deployment image: $CURRENT_IMAGE"
+            CURRENT_API_IMAGE=$(kubectl get deployment/agrocd-api -n api-dev -o jsonpath='{.spec.template.spec.containers[0].image}')
+            CURRENT_DB_IMAGE=$(kubectl get job/agrocd-db-migrator -n api-dev -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)
+            echo "Current API image: $CURRENT_API_IMAGE"
+            echo "Current DB migrator image: $CURRENT_DB_IMAGE"
 
-            if [ "$CURRENT_IMAGE" = "$EXPECTED_IMAGE" ]; then
+            if [ "$CURRENT_API_IMAGE" = "$EXPECTED_API_IMAGE" ] && [ "$CURRENT_DB_IMAGE" = "$EXPECTED_DB_IMAGE" ]; then
               break
             fi
 
             sleep 5
           done
 
-          if [ "$CURRENT_IMAGE" != "$EXPECTED_IMAGE" ]; then
-            echo "Deployment image did not update to expected value."
-            echo "Expected: $EXPECTED_IMAGE"
-            echo "Actual: $CURRENT_IMAGE"
+          if [ "$CURRENT_API_IMAGE" != "$EXPECTED_API_IMAGE" ]; then
+            echo "API deployment image did not update to expected value."
             exit 1
           fi
 
+          if [ "$CURRENT_DB_IMAGE" != "$EXPECTED_DB_IMAGE" ]; then
+            echo "Database migrator image did not update to expected value."
+            exit 1
+          fi
+
+          kubectl rollout status deployment/postgres -n api-dev --timeout=120s
+          kubectl wait --for=condition=complete job/agrocd-db-migrator -n api-dev --timeout=120s
           kubectl rollout status deployment/agrocd-api -n api-dev --timeout=120s
 
-      - name: Run .NET integration tests
+      - name: Run deployed .NET integration tests
         run: |
           KIND_IP=$(docker inspect agrocd-control-plane -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
           echo "Found kind IP: $KIND_IP"
@@ -139,14 +168,11 @@ jobs:
           INTEGRATION_TESTS_HOST_HEADER="dev.local" \
           dotnet test AgroCDDotnet.Api.Tests/AgroCDDotnet.Api.Tests.csproj --configuration Release --filter "TestTarget=Deployed"
 
-      - name: Integration Tests
+      - name: Run Postman integration tests
         run: |
-          # Use the kind cluster IP to hit the dev environment via Ingress
-          # Since we are running in a container, localhost won't work
           KIND_IP=$(docker inspect agrocd-control-plane -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
           echo "Found kind IP: $KIND_IP"
-          
-          # Run Postman tests using Newman
+
           newman run integration-tests.postman_collection.json \
             --env-var "base_url=$KIND_IP" \
             --env-var "host_header=dev.local" \
@@ -168,21 +194,27 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Prepare release/test branch
+        run: |
+          git fetch origin release/dev
+          if git ls-remote --exit-code --heads origin release/test; then
+            git fetch origin release/test
+          fi
+          git checkout -B release/test origin/release/dev
+
       - name: Update Test Kustomize
         run: |
           cd gitops/overlays/test
-          kustomize edit set image agrocd-api=${{ needs.build.outputs.full_image }}
+          kustomize edit set image agrocd-api=${{ needs.build.outputs.api_image }}
+          kustomize edit set image agrocd-db-migrator=${{ needs.build.outputs.db_image }}
 
       - name: Commit and Push changes (Test)
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add gitops/overlays/test/kustomization.yaml
-          git commit -m "Promote image to test: ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
-          # Pull latest changes before pushing to avoid conflicts
-          git pull --rebase origin main
-          # Use the GITHUB_TOKEN to authorize the push
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git add .
+          git commit -m "Promote app and db images to test: ${{ needs.build.outputs.image_tag }}" || echo "No changes to commit"
+          git push --force-with-lease https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:release/test
 
       - name: Cleanup runner state
         if: always()
