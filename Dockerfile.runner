@@ -19,12 +19,13 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     jq \
     libicu-dev \
-    nodejs \
-    npm \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Newman for Postman tests
-RUN npm install -g newman
+# Install Node.js (current LTS) and Newman
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g newman \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI
 RUN install -m 0755 -d /etc/apt/keyrings \
