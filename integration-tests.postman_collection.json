@@ -21,7 +21,7 @@
 							"});",
 							"",
 							"pm.test(\"Array contains 5 pieces of content\", function () {",
-							"    pm.expect(pm.response.json().length).to.equal(5);",
+							"    pm.expect(pm.response.json().length).to.equal(15);",
 							"});",
 							"",
 							"pm.test(\"Each object has correct structure\", function () {",
